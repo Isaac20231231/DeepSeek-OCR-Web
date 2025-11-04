@@ -11,6 +11,7 @@ DeepSeek OCR 后端核心执行器
 
 import json
 import os
+import sys
 import subprocess
 import threading
 from pathlib import Path
@@ -24,6 +25,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 PDF_SCRIPT = PROJECT_ROOT / "run_dpsk_ocr_pdf.py"
 IMAGE_SCRIPT = PROJECT_ROOT / "run_dpsk_ocr_image.py"
 CONFIG_PATH = PROJECT_ROOT / "config.py"
+
+# 日志文件路径（用于写入详细的 OCR 日志）
+OCR_LOG_FILE = PROJECT_ROOT.parent / "ocr_task.log"
+
+def log_to_file(message: str):
+    """同时输出到控制台和日志文件"""
+    print(message, flush=True)
+    try:
+        with open(OCR_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{message}\n")
+            f.flush()
+    except Exception:
+        pass  # 如果无法写入日志文件，至少输出到控制台
 
 
 # ====== 任务状态持久化 ======
@@ -90,9 +104,9 @@ def run_ocr_task(
 
         override_config(MODEL_PATH, input_path, str(result_dir), prompt)
 
-        print(f"🚀 启动 DeepSeek OCR 任务 ({file_type.upper()})")
-        print(f"📄 使用脚本: {script_path}")
-        print(f"📁 输出路径: {result_dir}")
+        log_to_file(f"🚀 启动 DeepSeek OCR 任务 ({file_type.upper()})")
+        log_to_file(f"📄 使用脚本: {script_path}")
+        log_to_file(f"📁 输出路径: {result_dir}")
 
         command = ["python", str(script_path)]
 
@@ -115,14 +129,14 @@ def run_ocr_task(
             if cuda_available:
                 gpu_count = torch.cuda.device_count()
                 gpu_name = torch.cuda.get_device_name(int(DEVICE_ID)) if gpu_count > int(DEVICE_ID) else "Unknown"
-                print(f"🔧 GPU 设备配置: CUDA_VISIBLE_DEVICES={DEVICE_ID}")
-                print(f"✅ CUDA 可用: {cuda_available}, GPU 数量: {gpu_count}, GPU 名称: {gpu_name}")
+                log_to_file(f"🔧 GPU 设备配置: CUDA_VISIBLE_DEVICES={DEVICE_ID}")
+                log_to_file(f"✅ CUDA 可用: {cuda_available}, GPU 数量: {gpu_count}, GPU 名称: {gpu_name}")
             else:
-                print(f"⚠️ 警告: CUDA 不可用，将使用 CPU（速度会很慢）")
+                log_to_file(f"⚠️ 警告: CUDA 不可用，将使用 CPU（速度会很慢）")
         except Exception as e:
-            print(f"⚠️ 无法检查 GPU 状态: {e}")
+            log_to_file(f"⚠️ 无法检查 GPU 状态: {e}")
         
-        print(f"🔧 环境变量: CUDA_VISIBLE_DEVICES={env.get('CUDA_VISIBLE_DEVICES')}")
+        log_to_file(f"🔧 环境变量: CUDA_VISIBLE_DEVICES={env.get('CUDA_VISIBLE_DEVICES')}")
 
         # 使用 unbuffered 模式确保输出实时显示
         process = subprocess.Popen(
@@ -144,7 +158,7 @@ def run_ocr_task(
                     continue
 
                 # 输出所有日志以便调试
-                print(f"[OCR] {line}")
+                log_to_file(f"[OCR] {line}")
 
                 # 根据日志关键字推算进度
                 line_lower = line.lower()
@@ -160,7 +174,7 @@ def run_ocr_task(
                     progress = 100
                 elif "cuda" in line_lower or "gpu" in line_lower or "device" in line_lower:
                     # GPU 相关日志，特别关注
-                    print(f"🔍 [GPU信息] {line}")
+                    log_to_file(f"🔍 [GPU信息] {line}")
 
                 # 每次进度更新都写入任务状态文件
                 write_task_state(task_id, {
@@ -178,16 +192,19 @@ def run_ocr_task(
         thread.join()
 
         if process.returncode != 0:
-            write_task_state(task_id, {"status": "error", "message": "DeepSeek OCR 执行失败"})
-            raise RuntimeError("DeepSeek OCR 执行失败")
+            error_msg = f"DeepSeek OCR 执行失败，返回码: {process.returncode}"
+            log_to_file(f"❌ {error_msg}")
+            write_task_state(task_id, {"status": "error", "message": error_msg})
+            raise RuntimeError(error_msg)
 
         files = list_result_files(result_dir)
         write_task_state(task_id, {"status": "finished", "result_dir": str(result_dir), "files": files})
 
-        print(f"✅ 任务完成：{task_id}")
+        log_to_file(f"✅ 任务完成：{task_id}")
         return {"status": "finished", "task_id": task_id, "result_dir": str(result_dir), "files": files}
 
     except Exception as e:
-        write_task_state(task_id, {"status": "error", "message": str(e)})
-        print(f"❌ 任务异常 {task_id}: {e}")
-        return {"status": "error", "message": str(e)}
+        error_msg = str(e)
+        log_to_file(f"❌ 任务异常 {task_id}: {error_msg}")
+        write_task_state(task_id, {"status": "error", "message": error_msg})
+        return {"status": "error", "message": error_msg}
