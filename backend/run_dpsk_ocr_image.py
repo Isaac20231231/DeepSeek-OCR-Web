@@ -1,6 +1,7 @@
 import asyncio
 import re
 import os
+import sys
 
 import torch
 if torch.version.cuda == '11.8':
@@ -10,6 +11,26 @@ os.environ['VLLM_USE_V1'] = '0'
 # 优先使用环境变量中的 CUDA_VISIBLE_DEVICES，如果没有设置则使用默认值 '0'
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
     os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv("DEVICE_ID", "0")
+
+# 设置输出为无缓冲，确保日志实时显示
+sys.stdout = sys.__stdout__
+sys.stderr = sys.__stderr__
+
+print(f"[脚本启动] CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}", flush=True)
+
+# 验证 GPU 配置
+print(f"=" * 60)
+print(f"🔧 GPU 配置检查")
+print(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not set')}")
+print(f"CUDA 可用: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU 数量: {torch.cuda.device_count()}")
+    print(f"当前 GPU: {torch.cuda.current_device()}")
+    print(f"GPU 名称: {torch.cuda.get_device_name(0)}")
+    print(f"GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+else:
+    print(f"⚠️ 警告: CUDA 不可用，将使用 CPU（速度会很慢）")
+print(f"=" * 60)
 
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
@@ -148,7 +169,7 @@ def process_image_with_refs(image, ref_texts):
 
 async def stream_generate(image=None, prompt=''):
 
-
+    print("🚀 正在初始化 AsyncLLMEngine（这可能需要一些时间）...", flush=True)
     engine_args = AsyncEngineArgs(
         model=MODEL_PATH,
         hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
@@ -160,6 +181,7 @@ async def stream_generate(image=None, prompt=''):
         gpu_memory_utilization=0.75,
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
+    print("✅ AsyncLLMEngine 初始化完成", flush=True)
     
     logits_processors = [NoRepeatNGramLogitsProcessor(ngram_size=30, window_size=90, whitelist_token_ids= {128821, 128822})] #whitelist: <td>, </td> 
 

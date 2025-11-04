@@ -1,4 +1,5 @@
 import os
+import sys
 import fitz
 import img2pdf
 import io
@@ -6,7 +7,10 @@ import re
 from tqdm import tqdm
 import torch
 from concurrent.futures import ThreadPoolExecutor
- 
+
+# 设置输出为无缓冲，确保日志实时显示
+sys.stdout = sys.__stdout__  # 确保使用标准输出
+sys.stderr = sys.__stderr__
 
 if torch.version.cuda == '11.8':
     os.environ["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
@@ -14,6 +18,8 @@ os.environ['VLLM_USE_V1'] = '0'
 # 优先使用环境变量中的 CUDA_VISIBLE_DEVICES，如果没有设置则使用默认值 '0'
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
     os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv("DEVICE_ID", "0")
+
+print(f"[脚本启动] CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}", flush=True)
 
 
 from config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, SKIP_REPEAT, MAX_CONCURRENCY, NUM_WORKERS, CROP_MODE
@@ -30,7 +36,22 @@ from process.image_process import DeepseekOCRProcessor
 
 ModelRegistry.register_model("DeepseekOCRForCausalLM", DeepseekOCRForCausalLM)
 
+# 验证 GPU 配置
+import torch
+print(f"=" * 60)
+print(f"🔧 GPU 配置检查")
+print(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not set')}")
+print(f"CUDA 可用: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU 数量: {torch.cuda.device_count()}")
+    print(f"当前 GPU: {torch.cuda.current_device()}")
+    print(f"GPU 名称: {torch.cuda.get_device_name(0)}")
+    print(f"GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+else:
+    print(f"⚠️ 警告: CUDA 不可用，将使用 CPU（速度会很慢）")
+print(f"=" * 60)
 
+print("🚀 正在初始化 LLM 模型（这可能需要一些时间）...")
 llm = LLM(
     model=MODEL_PATH,
     hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
@@ -44,6 +65,7 @@ llm = LLM(
     gpu_memory_utilization=0.9,
     disable_mm_preprocessor_cache=True
 )
+print("✅ LLM 模型初始化完成")
 
 logits_processors = [NoRepeatNGramLogitsProcessor(ngram_size=20, window_size=50, whitelist_token_ids= {128821, 128822})] #window for fast；whitelist_token_ids: <td>,</td>
 

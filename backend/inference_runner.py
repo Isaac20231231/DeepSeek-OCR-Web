@@ -108,14 +108,29 @@ def run_ocr_task(
         
         env["VLLM_USE_V1"] = "0"
         
-        print(f"🔧 GPU 设备配置: CUDA_VISIBLE_DEVICES={DEVICE_ID}")
+        # 验证 GPU 可用性
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            if cuda_available:
+                gpu_count = torch.cuda.device_count()
+                gpu_name = torch.cuda.get_device_name(int(DEVICE_ID)) if gpu_count > int(DEVICE_ID) else "Unknown"
+                print(f"🔧 GPU 设备配置: CUDA_VISIBLE_DEVICES={DEVICE_ID}")
+                print(f"✅ CUDA 可用: {cuda_available}, GPU 数量: {gpu_count}, GPU 名称: {gpu_name}")
+            else:
+                print(f"⚠️ 警告: CUDA 不可用，将使用 CPU（速度会很慢）")
+        except Exception as e:
+            print(f"⚠️ 无法检查 GPU 状态: {e}")
+        
+        print(f"🔧 环境变量: CUDA_VISIBLE_DEVICES={env.get('CUDA_VISIBLE_DEVICES')}")
 
+        # 使用 unbuffered 模式确保输出实时显示
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
-            bufsize=1,
+            bufsize=0,  # 无缓冲，实时输出
             env=env,  # 传递环境变量
         )
 
@@ -125,18 +140,27 @@ def run_ocr_task(
             nonlocal progress
             for line in process.stdout:
                 line = line.strip()
+                if not line:  # 跳过空行
+                    continue
+
+                # 输出所有日志以便调试
+                print(f"[OCR] {line}")
 
                 # 根据日志关键字推算进度
-                if "loading" in line.lower():
-                    progress = 10
-                elif "pre-processed" in line.lower():
-                    progress = 30
-                elif "generate" in line.lower():
-                    progress = 60
-                elif "save results" in line.lower():
-                    progress = 90
-                elif "result_with_boxes" in line.lower() or "complete" in line.lower():
+                line_lower = line.lower()
+                if "loading" in line_lower or "initializing" in line_lower:
+                    progress = max(progress, 10)
+                elif "pre-processed" in line_lower or "preprocessing" in line_lower:
+                    progress = max(progress, 30)
+                elif "generate" in line_lower or "generating" in line_lower:
+                    progress = max(progress, 60)
+                elif "save results" in line_lower or "saving" in line_lower:
+                    progress = max(progress, 90)
+                elif "result_with_boxes" in line_lower or "complete" in line_lower or "finished" in line_lower:
                     progress = 100
+                elif "cuda" in line_lower or "gpu" in line_lower or "device" in line_lower:
+                    # GPU 相关日志，特别关注
+                    print(f"🔍 [GPU信息] {line}")
 
                 # 每次进度更新都写入任务状态文件
                 write_task_state(task_id, {
@@ -147,8 +171,6 @@ def run_ocr_task(
 
                 if on_progress:
                     on_progress(progress)
-
-                print(line)
 
         thread = threading.Thread(target=_read_output)
         thread.start()
