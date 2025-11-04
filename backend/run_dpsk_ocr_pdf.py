@@ -57,26 +57,48 @@ print(f"=" * 60)
 
 print("🚀 正在初始化 LLM 模型（这可能需要一些时间）...")
 # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
-# 需要在 hf_overrides 中设置 torch_dtype，同时在 dtype 参数中也设置
 import torch
-print(f"🔧 设置 dtype=half 用于 Tesla T4 GPU", flush=True)
-llm = LLM(
-    model=MODEL_PATH,
-    hf_overrides={
-        "architectures": ["DeepseekOCRForCausalLM"],
-        "torch_dtype": "float16",  # 在模型配置中覆盖 dtype
-    },
-    block_size=256,
-    enforce_eager=False,
-    trust_remote_code=True, 
-    max_model_len=8192,
-    swap_space=0,
-    max_num_seqs=MAX_CONCURRENCY,
-    tensor_parallel_size=1,
-    gpu_memory_utilization=0.9,
-    disable_mm_preprocessor_cache=True,
-    dtype="half",  # 使用 "half" (float16) 而不是 bfloat16，以支持 Tesla T4
-)
+
+# 先尝试使用 torch.float16 对象
+try:
+    print(f"🔧 尝试设置 dtype=torch.float16 用于 Tesla T4 GPU", flush=True)
+    llm = LLM(
+        model=MODEL_PATH,
+        hf_overrides={
+            "architectures": ["DeepseekOCRForCausalLM"],
+            "torch_dtype": "float16",
+        },
+        block_size=256,
+        enforce_eager=False,
+        trust_remote_code=True, 
+        max_model_len=8192,
+        swap_space=0,
+        max_num_seqs=MAX_CONCURRENCY,
+        tensor_parallel_size=1,
+        gpu_memory_utilization=0.9,
+        disable_mm_preprocessor_cache=True,
+        dtype=torch.float16,  # 尝试使用 torch.float16 对象
+    )
+except Exception as e:
+    print(f"⚠️ 使用 torch.float16 对象失败: {e}", flush=True)
+    print(f"🔧 尝试使用字符串 'half'...", flush=True)
+    llm = LLM(
+        model=MODEL_PATH,
+        hf_overrides={
+            "architectures": ["DeepseekOCRForCausalLM"],
+            "torch_dtype": "float16",
+        },
+        block_size=256,
+        enforce_eager=False,
+        trust_remote_code=True, 
+        max_model_len=8192,
+        swap_space=0,
+        max_num_seqs=MAX_CONCURRENCY,
+        tensor_parallel_size=1,
+        gpu_memory_utilization=0.9,
+        disable_mm_preprocessor_cache=True,
+        dtype="half",
+    )
 print("✅ LLM 模型初始化完成")
 
 logits_processors = [NoRepeatNGramLogitsProcessor(ngram_size=20, window_size=50, whitelist_token_ids= {128821, 128822})] #window for fast；whitelist_token_ids: <td>,</td>

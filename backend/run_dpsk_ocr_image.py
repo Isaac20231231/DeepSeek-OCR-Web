@@ -175,24 +175,46 @@ async def stream_generate(image=None, prompt=''):
 
     print("🚀 正在初始化 AsyncLLMEngine（这可能需要一些时间）...", flush=True)
     # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
-    # 需要在 hf_overrides 中设置 torch_dtype，同时在 dtype 参数中也设置
+    # 尝试使用 torch.float16 对象而不是字符串
     import torch
-    engine_args = AsyncEngineArgs(
-        model=MODEL_PATH,
-        hf_overrides={
-            "architectures": ["DeepseekOCRForCausalLM"],
-            "torch_dtype": "float16",  # 在模型配置中覆盖 dtype
-        },
-        block_size=256,
-        max_model_len=8192,
-        enforce_eager=False,
-        trust_remote_code=True,  
-        tensor_parallel_size=1,
-        gpu_memory_utilization=0.75,
-        dtype="half",  # 使用 "half" (float16) 而不是 bfloat16，以支持 Tesla T4
-    )
-    print(f"🔧 设置 dtype=half 用于 Tesla T4 GPU", flush=True)
-    engine = AsyncLLMEngine.from_engine_args(engine_args)
+    
+    # 先尝试直接使用 torch.float16 对象
+    try:
+        engine_args = AsyncEngineArgs(
+            model=MODEL_PATH,
+            hf_overrides={
+                "architectures": ["DeepseekOCRForCausalLM"],
+                "torch_dtype": "float16",  # 在模型配置中覆盖 dtype
+            },
+            block_size=256,
+            max_model_len=8192,
+            enforce_eager=False,
+            trust_remote_code=True,  
+            tensor_parallel_size=1,
+            gpu_memory_utilization=0.75,
+            dtype=torch.float16,  # 尝试使用 torch.float16 对象
+        )
+        print(f"🔧 设置 dtype=torch.float16 用于 Tesla T4 GPU", flush=True)
+        engine = AsyncLLMEngine.from_engine_args(engine_args)
+    except Exception as e:
+        print(f"⚠️ 使用 torch.float16 对象失败: {e}", flush=True)
+        print(f"🔧 尝试使用字符串 'half'...", flush=True)
+        # 如果失败，回退到字符串
+        engine_args = AsyncEngineArgs(
+            model=MODEL_PATH,
+            hf_overrides={
+                "architectures": ["DeepseekOCRForCausalLM"],
+                "torch_dtype": "float16",
+            },
+            block_size=256,
+            max_model_len=8192,
+            enforce_eager=False,
+            trust_remote_code=True,  
+            tensor_parallel_size=1,
+            gpu_memory_utilization=0.75,
+            dtype="half",
+        )
+        engine = AsyncLLMEngine.from_engine_args(engine_args)
     print("✅ AsyncLLMEngine 初始化完成", flush=True)
     
     logits_processors = [NoRepeatNGramLogitsProcessor(ngram_size=30, window_size=90, whitelist_token_ids= {128821, 128822})] #whitelist: <td>, </td> 

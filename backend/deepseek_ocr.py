@@ -284,6 +284,18 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         model_config = vllm_config.model_config
         tokenizer = cached_tokenizer_from_config(model_config)
         self.image_token_id = tokenizer.vocab[_IMAGE_TOKEN]
+        
+        # 保存模型使用的 dtype，用于后续的张量转换
+        # Tesla T4 等 GPU 不支持 bfloat16，需要使用 float16
+        self.dtype = model_config.dtype if hasattr(model_config, 'dtype') else torch.float16
+        # 如果检测到是 bfloat16 但 GPU 不支持，强制使用 float16
+        if self.dtype == torch.bfloat16:
+            import torch.cuda
+            if torch.cuda.is_available():
+                compute_capability = torch.cuda.get_device_capability(0)
+                if compute_capability[0] < 8:  # compute capability < 8.0
+                    print(f"⚠️ GPU compute capability {compute_capability[0]}.{compute_capability[1]} < 8.0, 强制使用 float16 而不是 bfloat16")
+                    self.dtype = torch.float16
 
         self.sam_model = build_sam_vit_b()
         self.vision_model = build_clip_l()
@@ -384,7 +396,7 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
         with torch.no_grad():
             for jdx in range(images_spatial_crop.size(0)):
                 # with torch.set_grad_enabled(False):
-                patches = images_crop[jdx][0].to(torch.bfloat16) # batch_size = 1
+                patches = images_crop[jdx][0].to(self.dtype) # batch_size = 1，使用配置的 dtype
                 image_ori = pixel_values[jdx]
                 crop_shape = images_spatial_crop[jdx][0]
 
@@ -472,7 +484,7 @@ class DeepseekOCRForCausalLM(nn.Module, SupportsMultiModal, SupportsPP):
 
         # image_input: [pixel_values, images_crop, images_spatial_crop]
     
-        pixel_values = image_input[0].to(torch.bfloat16)
+        pixel_values = image_input[0].to(self.dtype)  # 使用配置的 dtype，而不是硬编码 bfloat16
         # print(image_input[1][0].shape)
         # print(type(image_input[1]))
         # exit()
