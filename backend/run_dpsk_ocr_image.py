@@ -12,6 +12,10 @@ os.environ['VLLM_USE_V1'] = '0'
 if "CUDA_VISIBLE_DEVICES" not in os.environ:
     os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv("DEVICE_ID", "0")
 
+# Tesla T4 不支持 bfloat16，强制使用 float16
+# 通过环境变量告诉 vLLM 使用 float16
+os.environ['VLLM_DTYPE'] = 'half'
+
 # 设置输出为无缓冲，确保日志实时显示
 sys.stdout = sys.__stdout__
 sys.stderr = sys.__stderr__
@@ -171,10 +175,14 @@ async def stream_generate(image=None, prompt=''):
 
     print("🚀 正在初始化 AsyncLLMEngine（这可能需要一些时间）...", flush=True)
     # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
-    # 使用字符串 "half" 而不是 torch.float16，因为 vLLM 的 AsyncEngineArgs 需要字符串格式
+    # 需要在 hf_overrides 中设置 torch_dtype，同时在 dtype 参数中也设置
+    import torch
     engine_args = AsyncEngineArgs(
         model=MODEL_PATH,
-        hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
+        hf_overrides={
+            "architectures": ["DeepseekOCRForCausalLM"],
+            "torch_dtype": "float16",  # 在模型配置中覆盖 dtype
+        },
         block_size=256,
         max_model_len=8192,
         enforce_eager=False,
@@ -183,6 +191,7 @@ async def stream_generate(image=None, prompt=''):
         gpu_memory_utilization=0.75,
         dtype="half",  # 使用 "half" (float16) 而不是 bfloat16，以支持 Tesla T4
     )
+    print(f"🔧 设置 dtype=half 用于 Tesla T4 GPU", flush=True)
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     print("✅ AsyncLLMEngine 初始化完成", flush=True)
     

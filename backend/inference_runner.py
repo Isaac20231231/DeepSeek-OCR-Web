@@ -121,6 +121,8 @@ def run_ocr_task(
             env["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
         
         env["VLLM_USE_V1"] = "0"
+        # Tesla T4 不支持 bfloat16，强制使用 float16
+        env["VLLM_DTYPE"] = "half"
         
         # 验证 GPU 可用性
         try:
