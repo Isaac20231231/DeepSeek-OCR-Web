@@ -53,7 +53,7 @@ print(f"=" * 60)
 
 print("🚀 正在初始化 LLM 模型（这可能需要一些时间）...")
 # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
-import torch
+# 使用字符串 "half" 而不是 torch.float16，因为 vLLM 的 LLM 需要字符串格式
 llm = LLM(
     model=MODEL_PATH,
     hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
@@ -66,7 +66,7 @@ llm = LLM(
     tensor_parallel_size=1,
     gpu_memory_utilization=0.9,
     disable_mm_preprocessor_cache=True,
-    dtype=torch.float16,  # 使用 float16 而不是 bfloat16，以支持 Tesla T4
+    dtype="half",  # 使用 "half" (float16) 而不是 bfloat16，以支持 Tesla T4
 )
 print("✅ LLM 模型初始化完成")
 

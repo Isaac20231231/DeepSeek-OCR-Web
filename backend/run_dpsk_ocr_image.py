@@ -171,6 +171,7 @@ async def stream_generate(image=None, prompt=''):
 
     print("🚀 正在初始化 AsyncLLMEngine（这可能需要一些时间）...", flush=True)
     # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
+    # 使用字符串 "half" 而不是 torch.float16，因为 vLLM 的 AsyncEngineArgs 需要字符串格式
     engine_args = AsyncEngineArgs(
         model=MODEL_PATH,
         hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
@@ -180,7 +181,7 @@ async def stream_generate(image=None, prompt=''):
         trust_remote_code=True,  
         tensor_parallel_size=1,
         gpu_memory_utilization=0.75,
-        dtype=torch.float16,  # 使用 float16 而不是 bfloat16，以支持 Tesla T4
+        dtype="half",  # 使用 "half" (float16) 而不是 bfloat16，以支持 Tesla T4
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     print("✅ AsyncLLMEngine 初始化完成", flush=True)
