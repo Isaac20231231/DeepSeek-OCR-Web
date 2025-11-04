@@ -170,6 +170,7 @@ def process_image_with_refs(image, ref_texts):
 async def stream_generate(image=None, prompt=''):
 
     print("🚀 正在初始化 AsyncLLMEngine（这可能需要一些时间）...", flush=True)
+    # Tesla T4 (compute capability 7.5) 不支持 bfloat16，需要使用 float16
     engine_args = AsyncEngineArgs(
         model=MODEL_PATH,
         hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
@@ -179,6 +180,7 @@ async def stream_generate(image=None, prompt=''):
         trust_remote_code=True,  
         tensor_parallel_size=1,
         gpu_memory_utilization=0.75,
+        dtype=torch.float16,  # 使用 float16 而不是 bfloat16，以支持 Tesla T4
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     print("✅ AsyncLLMEngine 初始化完成", flush=True)
