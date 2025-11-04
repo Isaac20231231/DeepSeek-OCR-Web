@@ -10,12 +10,13 @@ DeepSeek OCR 后端核心执行器
 """
 
 import json
+import os
 import subprocess
 import threading
 from pathlib import Path
 from typing import Callable, Optional, Dict, Any
 
-from config_loader import MODEL_PATH, LOGS_DIR
+from config_loader import MODEL_PATH, LOGS_DIR, DEVICE_ID
 from file_manager import detect_file_type, create_result_dir, list_result_files
 
 # 核心脚本路径
@@ -95,12 +96,27 @@ def run_ocr_task(
 
         command = ["python", str(script_path)]
 
+        # 准备环境变量，确保 GPU 设备正确传递
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(DEVICE_ID)
+        env["DEVICE_ID"] = str(DEVICE_ID)
+        
+        # 如果 CUDA 版本是 11.8，设置 TRITON 路径
+        import torch
+        if hasattr(torch, 'version') and hasattr(torch.version, 'cuda') and torch.version.cuda == '11.8':
+            env["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
+        
+        env["VLLM_USE_V1"] = "0"
+        
+        print(f"🔧 GPU 设备配置: CUDA_VISIBLE_DEVICES={DEVICE_ID}")
+
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1,
+            env=env,  # 传递环境变量
         )
 
         progress = 0

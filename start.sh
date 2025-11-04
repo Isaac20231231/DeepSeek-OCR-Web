@@ -43,6 +43,7 @@ echo -e "${YELLOW}>>> Step 2. 启动后端服务 (Uvicorn)...${RESET}"
 cd backend || cd .
 nohup uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT} --reload > ../backend.log 2>&1 &
 BACK_PID=$!
+disown $BACK_PID 2>/dev/null || true
 echo -e "${GREEN}✅ 后端已启动 (PID: $BACK_PID)，日志写入 backend.log${RESET}"
 cd ..
 
@@ -57,6 +58,7 @@ echo -e "${YELLOW}>>> Step 3. 启动前端服务 (Vite)...${RESET}"
 cd frontend
 nohup npm run dev -- --host > ../frontend.log 2>&1 &
 FRONT_PID=$!
+disown $FRONT_PID 2>/dev/null || true
 echo -e "${GREEN}✅ 前端已启动 (PID: $FRONT_PID)，日志写入 frontend.log${RESET}"
 cd ..
 
@@ -67,6 +69,7 @@ echo -e "🌐 后端接口地址: ${YELLOW}http://127.0.0.1:${BACKEND_PORT}${RES
 echo -e "🖥️  前端访问地址: ${YELLOW}http://127.0.0.1:${FRONTEND_PORT}${RESET}"
 echo -e "🧾 后端日志: backend.log"
 echo -e "🧾 前端日志: frontend.log"
+echo -e ""
+echo -e "${YELLOW}💡 提示: 服务已在后台运行，关闭终端不会影响服务运行${RESET}"
+echo -e "${YELLOW}💡 如需停止服务，请使用: pkill -f 'uvicorn|vite'${RESET}"
 echo -e "${GREEN}============================================================${RESET}"
-
-wait

@@ -5,7 +5,9 @@ import torch
 if torch.version.cuda == '11.8':
     os.environ["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
 os.environ['VLLM_USE_V1'] = '0'
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+# 优先使用环境变量中的 CUDA_VISIBLE_DEVICES，如果没有设置则使用默认值 '0'
+if "CUDA_VISIBLE_DEVICES" not in os.environ:
+    os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv("DEVICE_ID", "0")
 
 from config import MODEL_PATH, INPUT_PATH, OUTPUT_PATH, PROMPT, MAX_CONCURRENCY, CROP_MODE, NUM_WORKERS
 from concurrent.futures import ThreadPoolExecutor
